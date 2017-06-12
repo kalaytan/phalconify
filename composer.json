@@ -9,7 +9,7 @@
     ],
     "require": {
         "armonb/phalconify-database": "^1.0.2",
-        "phalcon/incubator": "3.0.3"
+        "phalcon/incubator": "^3.0.3"
     },
     "autoload": {
         "psr-4" : {
