@@ -3,6 +3,7 @@
 namespace Phalconify\Application\Rest\Auth\Helpers;
 
 use Phalconify\Application\Rest\Collections\UserBase as UsersCollection;
+use Phalconify\Application\Rest\Http\Response\Json as JsonResponse;
 
 class User
 {
@@ -82,5 +83,24 @@ class User
         }
 
         return true;
+    }
+    
+    public static function accessDenied($target)
+    {
+        $di = \Phalcon\Di::getDefault();
+        $ip = $di->get('phalconify-request')->getClientAddress();
+        $user = $di->getShared('phalconify-auth-authorise')->getCurrentUser();
+        $logger = new \Phalconify\Utils\Logger();
+
+        if ($user->role == 'Guest'){
+            $logger->logDeniedAccess($ip.' trying to access '.$target);
+            
+            return JsonResponse::unauthorized(['You are unauthorized']);
+        }
+        elseif ($user->role == 'User' || $user->role == 'Admin'){
+            $logger->logDeniedAccess($ip.' '.(string)$user->_id.' trying to access '.$target);
+
+            return JsonResponse::denied(['Access denied']);
+        }
     }
 }
