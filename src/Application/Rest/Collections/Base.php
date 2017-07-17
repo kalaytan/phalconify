@@ -3,6 +3,7 @@
 namespace Phalconify\Application\Rest\Collections;
 
 use Phalcon\Db\Adapter\MongoDB\Model\BSONDocument;
+use \Phalconify\Application\Rest\Http\Request;
 
 /**
  * Implements an abstraction for collections.
@@ -140,35 +141,34 @@ abstract class Base extends \Phalcon\Mvc\MongoCollection implements \JsonSeriali
     }
 
     /**
-     * Extend a parent \Phalcon\Mvc\Collection::aggregate() method.
-     * Added possible to generate $limit and $skip params based on GET request or default values.
+     * Aggregate request with pagination logic added at the end.
+     * uses _GET ?limit=int and ?page=int params or uses default values.
      *
-     * @param array $params Query parameters
-     * @param bool $pagination Pagination logic required for request.
+     * @param array $params Beginning of aggregation pipeline.
      *
-     * @return bool|BSONDocument|array false if failed / array if results with pagination. BSONDocument if no pagination.
+     * @return array|false False if failed / array if results with pagination.
      *
      */
-    public static function aggregate(array $params = null, bool $pagination = false)
+    public static function aggregatePagination(array $params = null)
     {
-        if ($pagination) {
-            return self::glueAggregatePagination($params);
-
-        } else {
-            return parent::aggregate($params);
+        $pagination = self::getAggregatePagination();
+        $result = parent::aggregate(array_merge($params, $pagination))->toArray();
+        if (isset($result[0]) && isset($result[0]['records']) && count($result[0]['records']) > 0) {
+            $result[0]['pageLimit'] = self::getPageLimitPagination();
+            return $result[0];
         }
+        return false;
     }
 
     /**
-     * Adds pagination logic to aggregate pipeline
-     * @param array $params array of aggregate pipeline
+     * gets pagination logic for aggregate pipeline
      *
-     * @return bool|BSONDocument
+     * @return array
      */
-    protected static function glueAggregatePagination($params)
+    public static function getAggregatePagination()
     {
         // sort out default get parameters
-        $request = new \Phalconify\Application\Rest\Http\Request;
+        $request = new Request;
         $page = $request->get('page', null, 1);
         $limit = $request->get('limit', null, self::getDefaultLimit());
         $skip = 0;
@@ -176,7 +176,7 @@ abstract class Base extends \Phalcon\Mvc\MongoCollection implements \JsonSeriali
             $skip = ($skip !== 0) ? $skip : ($page - 1) * $limit;
         }
 
-        // add pagination logic to pipeline
+        // add pagination logic
         $params[] = [
             '$group' =>
                 [
@@ -192,17 +192,18 @@ abstract class Base extends \Phalcon\Mvc\MongoCollection implements \JsonSeriali
                     'records' => ['$slice' => ['$all', (int)$skip, (int)$limit]],
                 ]
         ];
+        return $params;
+    }
 
-        // make request and save as array
-        $result = parent::aggregate($params)->toArray();
+    /**
+     * returns page limit from $_GET or default value
+     * @return int
+     */
+    public static function getPageLimitPagination()
+    {
+        $request = new Request;
+        $limit = $request->get('limit', null, self::getDefaultLimit());
 
-        // add pageLimit to document
-        if (true or isset($result[0]) && isset($result[0]['records']) && count($result[0]['records']) > 0) {
-            $result[0]['pageLimit'] = $limit;
-
-            return $result[0];
-        } else { // return false if nothing found
-            return false;
-        }
+        return $limit;
     }
 }
